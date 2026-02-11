@@ -1,0 +1,28 @@
+# Virtual Environment
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment Variables
+.env
+
+# FAISS embeddings
+embeddings/
+index/embeddings/
+
+# VS Code
+.vscode/
+
+# Streamlit cache
+.streamlit/
+
+# Logs
+*.log
+
+# Windows
+Thumbs.db
