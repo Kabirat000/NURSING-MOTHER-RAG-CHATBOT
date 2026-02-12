@@ -1,27 +1,25 @@
 # ============================
-# Streamlit RAG Chat App (Groq Version)
+# Streamlit RAG Chat App (Groq Version - Cloud Ready)
 # ============================
 
 import streamlit as st
 import os
+import json
 from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.chat_models import ChatOpenAI
 
-# Load environment variables
+# Load environment variables (works locally)
 load_dotenv()
 
-# -- CONFIG --
-index_folder = "embeddings"
-index_name = "breastfeeding_index"
+# -- GET GROQ API KEY (works locally + on Streamlit Cloud)
+api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
 
-# -- GET GROQ API KEY --
-api_key = os.environ.get("GROQ_API_KEY")
 if not api_key:
-    raise ValueError("Please set GROQ_API_KEY in your environment or .env file.")
+    raise ValueError("Please set GROQ_API_KEY in your environment or Streamlit secrets.")
 
-# -- PAGE SETUP --
+# -- PAGE CONFIG --
 st.set_page_config(
     page_title="Nursing Mothers Chatbot",
     page_icon="🍼",
@@ -47,20 +45,31 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# -- LOAD MODELS --
+# ============================
+# LOAD MODELS & BUILD FAISS
+# ============================
+
 @st.cache_resource
 def load_models_and_db():
     embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-    vector_db = FAISS.load_local(
-        index_folder,
-        embeddings=embedding_model,
-        index_name=index_name,
-        allow_dangerous_deserialization=True,
-    )
+    # Build FAISS dynamically from JSON files
+    chunk_folder = "index/data/chunks"
+    all_chunks = []
+
+    for filename in os.listdir(chunk_folder):
+        if filename.endswith(".json"):
+            with open(os.path.join(chunk_folder, filename), "r", encoding="utf-8") as f:
+                chunks = json.load(f)
+                all_chunks.extend(chunks)
+
+    if not all_chunks:
+        raise ValueError("No chunks found. Check your JSON files in index/data/chunks/")
+
+    vector_db = FAISS.from_texts(all_chunks, embedding_model)
 
     llm = ChatOpenAI(
-        model="llama-3.1-8b-instant",
+        model="llama-3.1-8b-instant",   # Groq supported model
         temperature=0.2,
         openai_api_key=api_key,
         openai_api_base="https://api.groq.com/openai/v1",
@@ -71,10 +80,16 @@ def load_models_and_db():
 
 vector_db, llm = load_models_and_db()
 
-# -- SESSION HISTORY --
+# ============================
+# SESSION STATE
+# ============================
+
 if "history" not in st.session_state:
     st.session_state.history = []
 
+# ============================
+# PROMPT TEMPLATE
+# ============================
 
 def rag_prompt(context, question):
     return f"""
@@ -91,8 +106,10 @@ Question:
 Answer:
 """.strip()
 
+# ============================
+# USER INPUT
+# ============================
 
-# -- UI --
 with st.form("chat-form"):
     question = st.text_area(
         "Ask your breastfeeding or infant care question:",
@@ -113,7 +130,10 @@ if submitted and question:
             {"question": question, "answer": answer}
         )
 
-# -- DISPLAY HISTORY --
+# ============================
+# DISPLAY CHAT HISTORY
+# ============================
+
 if st.session_state.history:
     st.markdown("---")
     for entry in reversed(st.session_state.history):
